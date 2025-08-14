@@ -1,30 +1,36 @@
 #!/bin/sh
-# Minimal boot.sh for dmenu.bin
+# boot.sh — extracts assets from dmenu.bin and starts the system
 
-TMPDIR=/tmp/dmenu
-ROOTFS="$TMPDIR/rootfs.ext2"
+TARGET=/dmenu.bin
+ASSET_DIR=/assets
 
-# Create temp directory
-mkdir -p "$TMPDIR"
+mkdir -p "$ASSET_DIR"
 
-# Extract the binary section from this script
-# Everything after the line "BINARY" is the uuencoded rootfs
-SCRIPT="$0"
-BINARY_LINE=$(grep -n '^BINARY$' "$SCRIPT" | cut -d: -f1)
-TAIL_LINE=$((BINARY_LINE + 1))
+# Check if assets are already extracted
+if [ ! -f "$ASSET_DIR/data" ]; then
+    # Extract uuencoded data section
+    awk '/^BINARY$/ {found=1; next} found {print}' "$TARGET" | uudecode -o "$ASSET_DIR/data"
 
-# Decode the uuencoded rootfs
-tail -n +$TAIL_LINE "$SCRIPT" | uudecode -o "$ROOTFS"
+    # Unpack ZIP
+    cd "$ASSET_DIR"
+    unzip -o data
+    rm data
+    cd -
+fi
 
-# Mount the rootfs
-MOUNTPOINT="$TMPDIR/root"
-mkdir -p "$MOUNTPOINT"
-mount -o loop "$ROOTFS" "$MOUNTPOINT"
+# Now $ASSET_DIR contains:
+# - installing
+# - updating
+# - boot_logo.bmp.gz
 
-# Switch root or run commands inside it
-# For example, run a shell inside the new root
-chroot "$MOUNTPOINT" /bin/sh
+# Example usage: decompress boot logo
+if [ -f "$ASSET_DIR/boot_logo.bmp.gz" ]; then
+    gunzip -f "$ASSET_DIR/boot_logo.bmp.gz"
+fi
 
-# Cleanup after exit
-umount "$MOUNTPOINT"
-rm -rf "$TMPDIR"
+# Continue with your normal boot process here
+# For example, mount rootfs, start init, etc.
+# mount -o loop /rootfs.ext2 /mnt
+# exec /mnt/init
+
+echo "Assets extracted. Boot process can continue..."
