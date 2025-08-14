@@ -1,45 +1,39 @@
 #!/bin/sh
-# boot.sh — extracts assets from dmenu.bin, mounts rootfs, and starts the UI
+set -e
 
 TARGET=/dmenu.bin
 ASSET_DIR=/assets
-ROOTFS_MNT=/mnt/rootfs
-UI_BIN=/usr/bin/my_ui   # Path inside rootfs
+ROOTFS=/mnt/rootfs
+SDCARD_DIR=$ROOTFS/mnt/SDCARD
+ZIP_FILE=/mnt/sdcard/NextUI.zip
+MOUNT_FLAG="$ROOTFS/.mounted"
+ZIP_FLAG="$ROOTFS/.NextUI_extracted"
 
-mkdir -p "$ASSET_DIR" "$ROOTFS_MNT"
+mkdir -p "$ASSET_DIR"
+mkdir -p "$ROOTFS"
 
-# 1. Extract assets if not already done
+# 1. Extract internal assets from dmenu.bin
 if [ ! -f "$ASSET_DIR/data" ]; then
     awk '/^BINARY$/ {found=1; next} found {print}' "$TARGET" | uudecode -o "$ASSET_DIR/data"
-
     cd "$ASSET_DIR"
     unzip -o data
     rm data
     cd -
 fi
 
-# 2. Decompress boot logo if needed
-if [ -f "$ASSET_DIR/boot_logo.bmp.gz" ]; then
-    gunzip -f "$ASSET_DIR/boot_logo.bmp.gz"
+# 2. Mount root filesystem
+if [ ! -f "$MOUNT_FLAG" ]; then
+    mount -o loop,rw /rootfs.ext2 "$ROOTFS"
+    touch "$MOUNT_FLAG"
 fi
 
-echo "Assets extracted. Mounting root filesystem..."
-
-# 3. Mount rootfs.ext2
-if [ -f "$ASSET_DIR/rootfs.ext2" ]; then
-    mount -o loop "$ASSET_DIR/rootfs.ext2" "$ROOTFS_MNT"
-else
-    echo "Error: rootfs.ext2 not found in $ASSET_DIR"
-    exit 1
+# 3. Extract NextUI.zip into /mnt/SDCARD inside mounted rootfs
+if [ -f "$ZIP_FILE" ] && [ ! -f "$ZIP_FLAG" ]; then
+    mkdir -p "$SDCARD_DIR"
+    unzip -o "$ZIP_FILE" -d "$SDCARD_DIR"
+    touch "$ZIP_FLAG"
 fi
 
-echo "Root filesystem mounted at $ROOTFS_MNT"
+"$SDCARD_DIR/.system/rg34xxsp/bin/nextui.elf"
 
-# 4. Launch UI inside rootfs
-if [ -x "$ROOTFS_MNT$UI_BIN" ]; then
-    echo "Starting UI..."
-    chroot "$ROOTFS_MNT" "$UI_BIN"
-else
-    echo "Error: UI binary $UI_BIN not found or not executable"
-    exit 1
-fi
+echo "Boot complete."
